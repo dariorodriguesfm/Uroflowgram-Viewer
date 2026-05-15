@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uroflujometría — Visor</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #070b14;
+  --surface:   #0d1526;
+  --surface2:  #121d35;
+  --border:    #1a2a48;
+  --border2:   #243556;
+  --text:      #dce8ff;
+  --text2:     #6b84ad;
+  --text3:     #3d5278;
+  --blue:      #4da6ff;
+  --blue-dim:  #1a4a8a;
+  --red:       #ff5c5c;
+  --green:     #00e676;
+  --sidebar-w: 265px;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text);
+  font-family: 'Outfit', sans-serif; font-size: 14px; overflow: hidden; }
+
+/* ── APP SHELL ── */
+#app { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── SIDEBAR ── */
+#sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sidebar-header {
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sidebar-logo {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--blue); display: block; margin-bottom: 5px;
+}
+.sidebar-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.sidebar-count {
+  font-size: 11px; color: var(--text2); margin-top: 3px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+#study-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+#study-list::-webkit-scrollbar { width: 3px; }
+#study-list::-webkit-scrollbar-track { background: transparent; }
+#study-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.study-item {
+  padding: 9px 14px; cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.12s ease;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.study-item:hover  { background: var(--surface2); border-left-color: var(--blue-dim); }
+.study-item.active { background: var(--surface2); border-left-color: var(--blue); }
+
+.item-index { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+.item-date  { font-size: 13px; font-weight: 500; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+.item-time  { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; }
+.study-item.active .item-date { color: var(--blue); }
+
+/* ── MAIN ── */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Top bar */
+#topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 22px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; gap: 16px;
+}
+#study-title {
+  font-size: 16px; font-weight: 600; color: var(--text);
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+#nav-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.nav-btn {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text); padding: 6px 14px; border-radius: 5px; cursor: pointer;
+  font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 500;
+  transition: all 0.12s; white-space: nowrap;
+}
+.nav-btn:hover { background: var(--border2); border-color: var(--blue); color: var(--blue); }
+.nav-btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+#nav-progress { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#nav-info { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; }
+#progress-track { width: 110px; height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+#progress-fill { height: 100%; background: var(--blue); border-radius: 1px; transition: width 0.3s ease; }
+
+/* Chart area */
+#chart-wrapper {
+  flex: 1; min-height: 0; position: relative;
+  padding: 10px 14px 6px;
+}
+#chart { position: absolute; inset: 10px 14px 6px; }
+
+/* Loading overlay */
+#loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); z-index: 10;
+}
+.spinner {
+  width: 28px; height: 28px;
+  border: 2px solid var(--border2); border-top-color: var(--blue);
+  border-radius: 50%; animation: spin 0.75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Metrics panel */
+#metrics-panel {
+  flex-shrink: 0; padding: 10px 18px 12px;
+  border-top: 1px solid var(--border);
+}
+.metrics-header {
+  font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text3); font-weight: 700; margin-bottom: 8px;
+}
+#metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 6px;
+}
+.metric-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 5px; padding: 7px 8px;
+}
+.m-label { font-size: 9.5px; color: var(--text2); margin-bottom: 3px; line-height: 1.3; }
+.m-value { font-size: 15px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text); }
+.m-unit  { font-size: 9.5px; color: var(--text3); font-family: 'JetBrains Mono', monospace; margin-left: 1px; }
+.metric-card.hi-red  .m-value { color: var(--red);  }
+.metric-card.hi-blue .m-value { color: var(--blue); }
+
+/* Error message */
+#error-msg {
+  display: none; position: absolute; inset: 0;
+  align-items: center; justify-content: center;
+  background: var(--bg); z-index: 10;
+  flex-direction: column; gap: 8px; color: var(--red); font-size: 13px;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">Uroflujometría</span>
+      <div class="sidebar-title">Visor de Estudios</div>
+      <div class="sidebar-count" id="sidebar-count">Cargando…</div>
+    </div>
+    <div id="study-list"></div>
+  </aside>
+
+  <!-- MAIN -->
+  <main id="main">
+    <div id="topbar">
+      <div id="study-title">—</div>
+      <div id="nav-controls">
+        <button class="nav-btn" id="btn-prev" onclick="navigate(-1)" disabled>← Anterior</button>
+        <div id="nav-progress">
+          <div id="nav-info">— / —</div>
+          <div id="progress-track"><div id="progress-fill" style="width:0%"></div></div>
+        </div>
+        <button class="nav-btn" id="btn-next" onclick="navigate(1)" disabled>Siguiente →</button>
+      </div>
+    </div>
+
+    <div id="chart-wrapper">
+      <div id="loading"><div class="spinner"></div></div>
+      <div id="error-msg" id="err"></div>
+      <div id="chart"></div>
+    </div>
+
+    <div id="metrics-panel">
+      <div class="metrics-header">Parámetros clínicos</div>
+      <div id="metrics-grid"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let studies = [];
+let currentIdx = -1;
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+async function init() {
+  try {
+    const res = await fetch('archivos.json');
+    if (!res.ok) throw new Error('No se encontró archivos.json');
+    studies = await res.json();
+    document.getElementById('sidebar-count').textContent =
+      `${studies.length} estudio${studies.length !== 1 ? 's' : ''}`;
+    buildSidebar();
+    if (studies.length > 0) loadStudy(0);
+  } catch(e) {
+    document.getElementById('sidebar-count').textContent = 'Error al cargar';
+    showErr(e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════════
+function buildSidebar() {
+  const list = document.getElementById('study-list');
+  list.innerHTML = '';
+  studies.forEach((name, i) => {
+    const { date, time } = parseName(name);
+    const div = document.createElement('div');
+    div.className = 'study-item';
+    div.id = `si-${i}`;
+    div.innerHTML = `
+      <span class="item-index">#${String(i+1).padStart(2,'0')}</span>
+      <span class="item-date">${date}</span>
+      <span class="item-time">${time}</span>`;
+    div.onclick = () => loadStudy(i);
+    list.appendChild(div);
+  });
+}
+
+function parseName(name) {
+  // Format: uro_DDMMYY  or  uro_DDMMYY_HHMMhs  or  uro_DDMMYY_HMMhs  etc.
+  const clean = name.replace(/^uro_/, '');
+  const parts = clean.split('_');
+  const dp = parts[0]; // DDMMYY
+  const tp = parts[1] ? parts[1].replace('hs','') : null;
+
+  const dd = dp.slice(0,2), mm = dp.slice(2,4), yy = dp.slice(4,6);
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const mon = months[parseInt(mm,10)-1] || mm;
+  const date = `${dd} ${mon} 20${yy}`;
+
+  let time = '—';
+  if (tp) {
+    let hh, mn;
+    if (tp.length >= 3) { mn = tp.slice(-2); hh = tp.slice(0,-2).padStart(2,'0'); }
+    else                { hh = tp.padStart(2,'0'); mn = '00'; }
+    time = `${hh}:${mn} hs`;
+  }
+  return { date, time };
+}
+
+// ═══════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function navigate(dir) {
+  const ni = currentIdx + dir;
+  if (ni >= 0 && ni < studies.length) loadStudy(ni);
+}
+
+function updateNav() {
+  const n = studies.length;
+  document.getElementById('btn-prev').disabled = currentIdx <= 0;
+  document.getElementById('btn-next').disabled = currentIdx >= n-1;
+  document.getElementById('nav-info').textContent = `${currentIdx+1} / ${n}`;
+  const pct = n > 1 ? (currentIdx / (n-1)) * 100 : 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.querySelectorAll('.study-item').forEach(el => el.classList.remove('active'));
+  const active = document.getElementById(`si-${currentIdx}`);
+  if (active) { active.classList.add('active'); active.scrollIntoView({block:'nearest',behavior:'smooth'}); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOAD STUDY
+// ═══════════════════════════════════════════════════════════
+async function loadStudy(idx) {
+  if (idx < 0 || idx >= studies.length) return;
+  currentIdx = idx;
+  updateNav();
+  const name = studies[idx];
+  const { date, time } = parseName(name);
+  document.getElementById('study-title').textContent = `${date}  —  ${time}`;
+  document.title = `${date} ${time} — Uroflujometría`;
+  setLoading(true); hideErr();
+  try {
+    const res = await fetch(`mediciones/${name}.txt`);
+    if (!res.ok) throw new Error(`No se pudo cargar: ${name}.txt`);
+    const text = await res.text();
+    const proc = processData(text);
+    renderChart(proc);
+    renderMetrics(proc.metrics);
+  } catch(e) {
+    showErr(e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setLoading(v) { document.getElementById('loading').style.display = v ? 'flex' : 'none'; }
+function showErr(msg)   { const el = document.getElementById('error-msg'); el.textContent = '⚠ ' + msg; el.style.display = 'flex'; }
+function hideErr()      { document.getElementById('error-msg').style.display = 'none'; }
+
+// ═══════════════════════════════════════════════════════════
+// DATA PROCESSING  (fiel traducción del código Python)
+// ═══════════════════════════════════════════════════════════
+
+function processData(text) {
+  const raw = parseTxt(text);
+  const filt = filtrarGlitches(raw);
+
+  const tUs  = filt.map(r => r[0]);
+  const masa = filt.map(r => r[1]);
+
+  // Tiempo en segundos, iniciando en cero
+  const t0 = Math.min(...tUs);
+  const tiempo = tUs.map(t => (t - t0) * 1e-6);
+
+  // Calibración del volumen
+  const volRaw = calibration(masa);
+
+  // Suavizado del volumen con filtro SG (ventana 51, orden 2)
+  const volumen = savgolFilter(volRaw, 51, 2);
+
+  // Flujo = derivada del volumen respecto al tiempo
+  const flujoRaw = gradient(volumen, tiempo);
+
+  // Suavizado del flujo
+  let flujo = savgolFilter(flujoRaw, 51, 2);
+  flujo = flujo.map(v => Math.max(0, v));   // negativos → 0
+
+  // Detección de inicio de micción
+  const N = 3, SENS = 0.01;
+  const idxInicio = encontrarAumento(volumen, N, SENS, 0);
+  const tInicio   = idxInicio !== null ? tiempo[idxInicio] : tiempo[0];
+
+  // Detección del fin (buscar después del pico de flujo)
+  const idxPico = argmax(flujo);
+  const idxFin  = encontrarDiferencia(volumen, N, SENS, idxPico);
+  const tFin    = idxFin !== null ? tiempo[idxFin] : tiempo[tiempo.length-1];
+
+  const metrics = calcMetrics(tiempo, volumen, flujo, tInicio, tFin, idxInicio, idxFin, idxPico);
+
+  return { tiempo, volumen, flujo, tInicio, tFin, metrics };
+}
+
+// ── Parseo del .txt ──
+function parseTxt(text) {
+  const data = [];
+  for (const line of text.trim().split('\n')) {
+    const p = line.trim().split(/[\t ]+/);
+    if (p.length >= 2) {
+      const x = parseFloat(p[0]), y = parseFloat(p[1]);
+      if (!isNaN(x) && !isNaN(y)) data.push([x, y]);
+    }
+  }
+  return data;
+}
+
+// ── Filtro de glitches ──
+function filtrarGlitches(data) {
+  if (data.length < 3) return data;
+  const out = [data[0]];
+  for (let i = 1; i < data.length-1; i++) {
+    const avg = (data[i-1][1] + data[i+1][1]) / 2;
+    if (Math.abs(data[i][1] - avg) <= 10) out.push(data[i]);
+  }
+  out.push(data[data.length-1]);
+  return out;
+}
+
+// ── Calibración ──
+function calibration(masa) {
+  const b = Math.min(...masa);
+  return masa.map(v => v - b);
+}
+
+// ── Filtro Savitzky-Golay ──
+function invertMatrix(M) {
+  const n = M.length;
+  const aug = M.map((row, i) => [...row, ...Array.from({length:n}, (_,j) => i===j?1:0)]);
+  for (let col = 0; col < n; col++) {
+    let maxR = col;
+    for (let r = col+1; r < n; r++) if (Math.abs(aug[r][col]) > Math.abs(aug[maxR][col])) maxR = r;
+    [aug[col], aug[maxR]] = [aug[maxR], aug[col]];
+    const piv = aug[col][col];
+    if (Math.abs(piv) < 1e-12) continue;
+    for (let j = 0; j < 2*n; j++) aug[col][j] /= piv;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = aug[r][col];
+      for (let j = 0; j < 2*n; j++) aug[r][j] -= f * aug[col][j];
+    }
+  }
+  return aug.map(row => row.slice(n));
+}
+
+function sgCoeffs(winSize, center, polyOrder) {
+  // x[i] = i - center  →  x[center] = 0
+  const po = Math.min(polyOrder, winSize-1);
+  const A  = Array.from({length:winSize}, (_,i) =>
+    Array.from({length:po+1}, (_,j) => Math.pow(i-center, j)));
+  const AtA = Array.from({length:po+1}, (_,i) =>
+    Array.from({length:po+1}, (_,j) =>
+      A.reduce((s,row) => s + row[i]*row[j], 0)));
+  const inv = invertMatrix(AtA);
+  // A[center] = [1,0,...,0]  →  coeffs[k] = sum_i inv[0][i] * A[k][i]
+  return Array.from({length:winSize}, (_,k) =>
+    inv[0].reduce((s,v,i) => s + v*A[k][i], 0));
+}
+
+function savgolFilter(y, windowLen, polyOrder) {
+  if (windowLen % 2 === 0) windowLen++;
+  const m  = (windowLen-1) / 2;
+  const n  = y.length;
+  const ic = sgCoeffs(windowLen, m, polyOrder);   // coeficientes para puntos interiores
+  const bc = {};                                   // cache de bordes
+  const res = new Array(n);
+
+  for (let i = 0; i < n; i++) {
+    const i0 = Math.max(0, i-m), i1 = Math.min(n-1, i+m);
+    const w  = i1 - i0 + 1;
+    let co;
+    if (w === windowLen) {
+      co = ic;
+    } else {
+      const key = `${w}_${i-i0}`;
+      if (!bc[key]) bc[key] = sgCoeffs(w, i-i0, polyOrder);
+      co = bc[key];
+    }
+    let v = 0;
+    for (let j = 0; j < w; j++) v += co[j] * y[i0+j];
+    res[i] = v;
+  }
+  return res;
+}
+
+// ── Gradiente numérico (diferencias centrales) ──
+function gradient(y, x) {
+  const n = y.length, g = new Array(n);
+  g[0]   = (y[1]-y[0]) / (x[1]-x[0]);
+  for (let i = 1; i < n-1; i++) g[i] = (y[i+1]-y[i-1]) / (x[i+1]-x[i-1]);
+  g[n-1] = (y[n-1]-y[n-2]) / (x[n-1]-x[n-2]);
+  return g;
+}
+
+// ── Encontrar inicio de micción ──
+function encontrarAumento(vol, n, sens, start) {
+  for (let i = start+n; i < vol.length; i++) {
+    let ok = true;
+    for (let j = i-n; j < i; j++) if (vol[i]-vol[j] <= sens) { ok=false; break; }
+    if (ok) return i;
+  }
+  return null;
+}
+
+// ── Encontrar fin de micción ──
+function encontrarDiferencia(vol, n, sens, start) {
+  for (let i = start+n; i < vol.length; i++) {
+    let ok = true;
+    for (let j = i-n; j < i; j++) if (Math.abs(vol[i]-vol[j]) >= sens) { ok=false; break; }
+    if (ok) return i;
+  }
+  return null;
+}
+
+function argmax(arr) {
+  let mi = 0;
+  for (let i = 1; i < arr.length; i++) if (arr[i] > arr[mi]) mi = i;
+  return mi;
+}
+
+// ── Cálculo de métricas ──
+function calcMetrics(tiempo, volumen, flujo, tInicio, tFin, idxInicio, idxFin, idxPico) {
+  const tiempoTotal   = tFin - tInicio;
+  const volumenTotal  = Math.max(...volumen);
+  const qMaximo       = Math.max(...flujo);
+  const tAQmax        = tiempo[idxPico] - tInicio;
+  const caudal_prom   = tiempoTotal > 0 ? volumenTotal / tiempoTotal : 0;
+
+  // Q Medio 90%  y  T de 90%
+  const vol90  = 0.9 * volumenTotal;
+  let idx90    = volumen.findIndex(v => v >= vol90);
+  if (idx90 < 0) idx90 = volumen.length-1;
+  const T90    = Math.max(0, tiempo[idx90] - tInicio);
+  const qM90   = idx90 > 0 ? flujo.slice(0,idx90).reduce((s,v)=>s+v,0)/idx90 : 0;
+
+  // Q a 2 segundos
+  let idxT2 = tiempo.findIndex(t => t > tInicio+2);
+  if (idxT2 < 0) idxT2 = tiempo.length-1;
+  const q2seg = flujo[idxT2] || 0;
+
+  // Volumen hasta Qmax
+  const volHastaQmax = volumen[idxPico];
+
+  // T descenso
+  const tDescenso = tFin - tiempo[idxPico];
+
+  // T entre pausas
+  const i0 = idxInicio || 0;
+  const i1 = idxFin   || tiempo.length-1;
+  let pausas = 0;
+  for (let i = i0; i <= i1; i++) if (flujo[i] <= 0) pausas++;
+  const dt     = tiempo.length > 11 ? tiempo[11]-tiempo[10] : 0.09;
+  const tPausas = Math.max(0, pausas * dt);
+  const tNeto   = Math.max(0, tiempoTotal - tPausas);
+
+  return { qMaximo, qM90, caudal_prom, q2seg, tAQmax, T90,
+           volumenTotal, volHastaQmax, tiempoTotal, tNeto, tDescenso, tPausas };
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER CHART
+// ═══════════════════════════════════════════════════════════
+function renderChart({ tiempo, volumen, flujo, tInicio, tFin }) {
+  const trVol = {
+    x: tiempo, y: volumen, name: 'Volumen (mL)',
+    type: 'scatter', mode: 'lines',
+    line: { color: '#4da6ff', width: 2 }, yaxis: 'y1'
+  };
+  const trFlujo = {
+    x: tiempo, y: flujo, name: 'Flujo (mL/s)',
+    type: 'scatter', mode: 'lines',
+    line: { color: '#ff5c5c', width: 2 }, yaxis: 'y2'
+  };
+
+  const layout = {
+    paper_bgcolor: 'transparent',
+    plot_bgcolor:  '#0d1526',
+    font: { family: 'Outfit, sans-serif', color: '#7a91b8', size: 12 },
+    margin: { l: 58, r: 58, t: 12, b: 44 },
+    autosize: true,
+    xaxis: {
+      title: { text: 'Tiempo (s)', font: { size: 12 } },
+      gridcolor: '#182840', zerolinecolor: '#182840',
+      tickfont: { family: 'JetBrains Mono', size: 11 }
+    },
+    yaxis: {
+      title: { text: 'Volumen (mL)', font: { color: '#4da6ff', size: 12 } },
+      tickfont: { color: '#4da6ff', family: 'JetBrains Mono', size: 11 },
+      gridcolor: '#0e1e36', zerolinecolor: '#182840',
+    },
+    yaxis2: {
+      title: { text: 'Flujo (mL/s)', font: { color: '#ff5c5c', size: 12 } },
+      tickfont: { color: '#ff5c5c', family: 'JetBrains Mono', size: 11 },
+      overlaying: 'y', side: 'right', range: [0, 50],
+      showgrid: false, zeroline: false,
+    },
+    legend: {
+      x: 0.01, y: 0.99, bgcolor: 'rgba(13,21,38,0.85)',
+      bordercolor: '#1a2a48', borderwidth: 1, font: { size: 12 }
+    },
+    shapes: [
+      { type:'line', xref:'x', yref:'paper', x0:tInicio, x1:tInicio, y0:0, y1:1,
+        line:{ color:'#00e676', width:1.5, dash:'dash' } },
+      { type:'line', xref:'x', yref:'paper', x0:tFin,    x1:tFin,    y0:0, y1:1,
+        line:{ color:'#00e676', width:1.5, dash:'dash' } }
+    ],
+    annotations: [
+      { xref:'x', yref:'paper', x:tInicio, y:1.01, text:'inicio', showarrow:false,
+        font:{ color:'#00e676', size:10 }, xanchor:'center' },
+      { xref:'x', yref:'paper', x:tFin,    y:1.01, text:'fin',    showarrow:false,
+        font:{ color:'#00e676', size:10 }, xanchor:'center' }
+    ]
+  };
+
+  const config = { responsive:true, displayModeBar:false };
+  Plotly.newPlot('chart', [trVol, trFlujo], layout, config);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER METRICS
+// ═══════════════════════════════════════════════════════════
+function renderMetrics(m) {
+  const items = [
+    { label:'Q máximo',      value:m.qMaximo.toFixed(1),       unit:'mL/s', cls:'hi-red'  },
+    { label:'Q Medio 90%',   value:m.qM90.toFixed(1),          unit:'mL/s', cls:''        },
+    { label:'Q promedio',    value:m.caudal_prom.toFixed(1),   unit:'mL/s', cls:''        },
+    { label:'Q a 2 seg',     value:m.q2seg.toFixed(1),         unit:'mL/s', cls:''        },
+    { label:'T a Qmáx',      value:m.tAQmax.toFixed(1),        unit:'s',    cls:''        },
+    { label:'T de 90%',      value:m.T90.toFixed(1),           unit:'s',    cls:''        },
+    { label:'Volumen total', value:m.volumenTotal.toFixed(1),  unit:'mL',   cls:'hi-blue' },
+    { label:'Vol. a Qmáx',  value:m.volHastaQmax.toFixed(1),  unit:'mL',   cls:''        },
+    { label:'Tiempo total',  value:m.tiempoTotal.toFixed(1),   unit:'s',    cls:''        },
+    { label:'Tiempo neto',   value:m.tNeto.toFixed(1),         unit:'s',    cls:''        },
+    { label:'T descenso',    value:m.tDescenso.toFixed(1),     unit:'s',    cls:''        },
+    { label:'T pausas',      value:m.tPausas.toFixed(1),       unit:'s',    cls:''        },
+  ];
+  document.getElementById('metrics-grid').innerHTML = items.map(it => `
+    <div class="metric-card ${it.cls}">
+      <div class="m-label">${it.label}</div>
+      <span class="m-value">${it.value}</span><span class="m-unit">${it.unit}</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// KEYBOARD NAVIGATION  (← →)
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft')  navigate(-1);
+  if (e.key === 'ArrowRight') navigate(1);
+});
+
+window.addEventListener('resize', () => {
+  const el = document.getElementById('chart');
+  if (el && el.data) Plotly.Plots.resize(el);
+});
+
+// ═══════════════════════════════════════════════════════════
+// START
+// ═══════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
