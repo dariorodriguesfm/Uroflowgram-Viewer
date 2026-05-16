@@ -111,7 +111,24 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   display: flex; align-items: center;
   padding: 12px 18px; border-top: 1px solid var(--border); flex-shrink: 0;
 }
-#bottom-left  { flex: 1; }                  /* spacer */
+#bottom-left  { flex: 1; display: flex; align-items: center; }
+#vol-ctrl { display: flex; align-items: center; gap: 6px; }
+#vol-ctrl label { font-size: 11px; color: var(--text2); white-space: nowrap; }
+#vol-max {
+  width: 58px; background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  padding: 5px 8px; border-radius: 5px; text-align: center; outline: none;
+  -moz-appearance: textfield;
+}
+#vol-max:focus { border-color: var(--blue); }
+#vol-max::-webkit-inner-spin-button, #vol-max::-webkit-outer-spin-button { -webkit-appearance: none; }
+#vol-ctrl span { font-size: 11px; color: var(--text2); }
+#vol-apply {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text2); padding: 5px 10px; border-radius: 5px; cursor: pointer;
+  font-family: 'Outfit', sans-serif; font-size: 11px; transition: all 0.12s;
+}
+#vol-apply:hover { border-color: var(--blue); color: var(--blue); }
 #nav-wrap     { display: flex; align-items: center; gap: 20px; }
 #bottom-right { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 
@@ -194,7 +211,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
     <!-- 3. BOTTOM BAR -->
     <div id="bottom-bar">
-      <div id="bottom-left"></div>
+      <div id="bottom-left">
+        <div id="vol-ctrl">
+          <label for="vol-max">Vol máx eje Y:</label>
+          <input type="number" id="vol-max" value="350" min="50" max="2000" step="25">
+          <span>mL</span>
+          <button id="vol-apply" onclick="applyVolumeRange()">Aplicar</button>
+        </div>
+      </div>
 
       <div id="nav-wrap">
         <button class="nav-btn-lg" id="btn-prev" onclick="navigate(-1)" disabled>← Anterior</button>
@@ -220,7 +244,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
 <script>
 let studies = [], currentIdx = -1, lastProcessed = null;
-let xAxisMax = 70;
+let xAxisMax = 70, yAxisMax = 350;
 
 // ── INIT ──
 async function init() {
@@ -350,17 +374,18 @@ function hideErr()    { document.getElementById('error-msg').style.display='none
 // ── TIME RANGE CONTROL ──
 function applyTimeRange() {
   const val = parseFloat(document.getElementById('time-max').value);
-  if (!isNaN(val) && val > 0) {
-    xAxisMax = val;
-    Plotly.relayout('chart', {'xaxis.range': [0, xAxisMax]});
-  }
+  if (!isNaN(val) && val > 0) { xAxisMax = val; Plotly.relayout('chart', {'xaxis.range': [0, xAxisMax]}); }
 }
 
-// Allow pressing Enter in the input
+function applyVolumeRange() {
+  const val = parseFloat(document.getElementById('vol-max').value);
+  if (!isNaN(val) && val > 0) { yAxisMax = val; Plotly.relayout('chart', {'yaxis.range': [0, yAxisMax]}); }
+}
+
+// Allow pressing Enter in the inputs
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('time-max').addEventListener('keydown', e => {
-    if (e.key === 'Enter') applyTimeRange();
-  });
+  document.getElementById('time-max').addEventListener('keydown', e => { if (e.key==='Enter') applyTimeRange(); });
+  document.getElementById('vol-max').addEventListener('keydown',  e => { if (e.key==='Enter') applyVolumeRange(); });
 });
 
 // ── DATA PROCESSING ──
@@ -474,38 +499,31 @@ function calcMetrics(tiempo,volumen,flujo,tInicio,tFin,idxInicio,idxFin,idxPico)
 // ── RENDER CHART ──
 function renderChart({tiempo, volumen, flujo, tInicio, tFin}) {
   Plotly.newPlot('chart', [
-    {x:tiempo, y:volumen, name:'Volumen (mL)', type:'scatter', mode:'lines', line:{color:'#4da6ff',width:2}, yaxis:'y1'},
-    {x:tiempo, y:flujo,   name:'Flujo (mL/s)', type:'scatter', mode:'lines', line:{color:'#ff5c5c',width:2}, yaxis:'y2'}
+    {x:tiempo, y:volumen, name:'Volumen (mL)', type:'scatter', mode:'lines', line:{color:'#4da6ff',width:2.5}, yaxis:'y1'},
+    {x:tiempo, y:flujo,   name:'Flujo (mL/s)', type:'scatter', mode:'lines', line:{color:'#ff5c5c',width:2.5}, yaxis:'y2'}
   ], {
     paper_bgcolor:'transparent', plot_bgcolor:'#0d1526',
-    font:{family:'Outfit, sans-serif', color:'#7a91b8', size:12},
-    margin:{l:58, r:52, t:14, b:44},
+    font:{family:'Outfit, sans-serif', color:'#7a91b8', size:14},
+    margin:{l:68, r:62, t:14, b:52},
     autosize:true,
     xaxis:{
-      title:{text:'Tiempo (s)',font:{size:12}},
+      title:{text:'Tiempo (s)', font:{size:15}},
       range:[0, xAxisMax],
       gridcolor:'#182840', zerolinecolor:'#182840',
-      tickfont:{family:'JetBrains Mono',size:11}
+      tickfont:{family:'JetBrains Mono', size:13}
     },
     yaxis:{
-      title:{text:'Volumen (mL)',font:{color:'#4da6ff',size:12}},
-      tickfont:{color:'#4da6ff',family:'JetBrains Mono',size:11},
-      gridcolor:'#0e1e36', zerolinecolor:'#182840', autorange:true
+      title:{text:'Volumen (mL)', font:{color:'#4da6ff', size:15}},
+      tickfont:{color:'#4da6ff', family:'JetBrains Mono', size:13},
+      range:[0, yAxisMax],
+      gridcolor:'#0e1e36', zerolinecolor:'#182840'
     },
     yaxis2:{
-      title:{text:'Flujo (mL/s)',font:{color:'#ff5c5c',size:12}},
-      tickfont:{color:'#ff5c5c',family:'JetBrains Mono',size:11},
+      title:{text:'Flujo (mL/s)', font:{color:'#ff5c5c', size:15}},
+      tickfont:{color:'#ff5c5c', family:'JetBrains Mono', size:13},
       overlaying:'y', side:'right', range:[0,50], showgrid:false, zeroline:false
     },
-    legend:{x:0.01,y:0.99,bgcolor:'rgba(13,21,38,0.85)',bordercolor:'#1a2a48',borderwidth:1,font:{size:12}},
-    shapes:[
-      {type:'line',xref:'x',yref:'paper',x0:tInicio,x1:tInicio,y0:0,y1:1,line:{color:'#00e676',width:1.5,dash:'dash'}},
-      {type:'line',xref:'x',yref:'paper',x0:tFin,   x1:tFin,   y0:0,y1:1,line:{color:'#00e676',width:1.5,dash:'dash'}}
-    ],
-    annotations:[
-      {xref:'x',yref:'paper',x:tInicio,y:1.02,text:'inicio',showarrow:false,font:{color:'#00e676',size:10},xanchor:'center'},
-      {xref:'x',yref:'paper',x:tFin,   y:1.02,text:'fin',   showarrow:false,font:{color:'#00e676',size:10},xanchor:'center'}
-    ]
+    legend:{x:0.01, y:0.99, bgcolor:'rgba(13,21,38,0.88)', bordercolor:'#1a2a48', borderwidth:1, font:{size:15}},
   }, {responsive:true, displayModeBar:false});
 }
 
